@@ -30,6 +30,42 @@ The dashboard includes interactive filtering and customizable visualizations des
 - Player, goalkeeper, and team-specific visualizations
 
 The player scatter plots allow users to compare metrics such as finishing efficiency, passing, duels, shooting, possession impact, and dribbling. The dashboard also allows comparisons against league-wide or positional averages.
+
+## Dashboard Visualizations
+
+### Player Analysis
+
+<p align="center">
+  <img src="figures/duel_scatter.png" width="46%">
+  <img src="figures/player_radar.png" width="46%">
+</p>
+
+<p align="center">
+  <em>Player comparison using duel-efficiency scatter plots and percentile-based radar charts.</em>
+</p>
+
+### Goalkeeper Analysis
+
+<p align="center">
+  <img src="figures/gk_scatter.png" width="46%">
+  <img src="figures/gk_radar.png" width="46%">
+</p>
+
+<p align="center">
+  <em>Goalkeeper comparison across shot-stopping, distribution, and possession metrics.</em>
+</p>
+
+### Team Analysis
+
+<p align="center">
+  <img src="figures/team_bar.png" width="46%">
+  <img src="figures/team_radar.png" width="46%">
+</p>
+
+<p align="center">
+  <em>Ivy League team comparisons using performance benchmarks and attacking/defensive profiles.</em>
+</p>
+
 ## Data Processing
 
 The project required significant preprocessing before the data could be used effectively in the dashboard.
@@ -80,6 +116,12 @@ Future improvements could include:
 
 This project was completed as my senior thesis in Yale University’s Department of Statistics and Data Science.
 
-- **Written thesis:** [Add link]
-- **Academic poster:** [Add link]
+📄 [Full thesis report](report/Report.pdf)  
+📊 [Academic poster](report/Poster.pdf)
 
+## Author
+
+**Rebeka Róth**  
+B.A. Statistics & Data Science, Yale University  
+Professional Footballer  
+[LinkedIn](https://www.linkedin.com/in/rebekaroth)

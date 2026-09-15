@@ -1,0 +1,671 @@
+---
+title: "plots"
+author: "Rebeka Róth"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+library(readxl)
+library(stringr)
+library(fmsb)
+library(gridExtra)
+library(ggrepel)
+library(rlang)
+library(tidyr)
+library(pubtheme)
+#library(ggradar)
+```
+
+List of players
+```{r}
+teams = list(
+  "brown" = c("A. Davis", "A. Lam", "A. Sahin", "A. Vargas", "A. Welch", "B. Birtwistle", "B. Schopp", "C. Gregory", "C. Robinson", "C. Silverman", "E. Weil", "G. De priest", "G. Toor", "H. Gholami", "H. Houston", "I. Chukwu", "J. Okonye", "K. Maguire", "K. Park", "K. Schlosser", "K. Treanor", "L. Gould", "L. Quinn", "L. Shell", "M. Grant-clavijo", "M. Templeton", "N. Cardoza", "N. Meite", "S. Gevelber"),
+  "columbia" = c("A. Akanyirige", "A. Bahugudumbi", "A. Faraone", "A. Prussak", "A. Turner", "C. Berry", "C. Pinnie", "C. Ruedt", "D. Elder", "G. Chan", "I. Liu", "J. Bitzer", "L. Rodriguez", "M. Beltran", "M. Ojo", "M. Tabion", "N. Omorogbe", "N. Ramirez", "S. Ambrose", "S. Cavaliere", "S. Cohn", "S. Jung", "S. Mahoney", "S. Moncion", "S. Robbins", "S. Weiss", "T. Parameswaran"),
+  "cornell" = c("A. Bishara", "A. Brotherton", "A. Colbert", "A. Jung", "A. Laden", "B. Brown", "C. Pokigo", "E. Fox", "E. Gibbons", "E. Koschineg", "G. Gonzalez", "I. Scott", "K. Ristianto", "L. DiPierri", "L. Ellingson", "L. Gallman", "M. Kessinger", "M. Kingsley", "M. Leroy", "N. Medugno", "P. Nichols", "R. Gabriel", "S. Allen", "S. Malaga", "T. Nelson"),
+  "dartmouth" = c("A. Connors", "A. Marin", "A. Seales", "C. Retterer", "D. Burke", "D. Granholm", "D. Hase", "E. Davidson", "E. Hardy", "E. Russ", "F. Valverde", "G. Faulkner", "G. Martin", "H. Curtin", "H. Rorick", "J. Curry", "K. Sutton", "L. Lauterborn", "M. Lundregan", "S. Adams", "S. Brown", "S. Shelburne", "T. Williams"),
+  "harvard" = c("A. Ahmadian", "A. Einde", "A. Francois", "Á. Gunnlaugsdóttir", "A. Hunter", "A. König", "A. Maechler", "A. Rayhill", "D. Tolson", "E. Gordon", "G. Maltby", "Í. Gonzalez", "J. Hasbo", "J. Leshnick", "J. Rose", "K. Mackey", "L. Muniz", "N. Golen", "Ó. Kristinsdóttir", "R. Stewart", "S. Farnham", "S. Lloyd", "S. Long", "V. Frelih"),
+  "penn" = c("A. Austen", "A. Chapel", "A. Cook", "A. Okafor", "C. Robke", "E. Priest", "E. Veenema", "H. Adamsky", "I. Glass", "I. Zulli", "J. Stewart", "K. Conte", "K. Peroulas", "L. Finkelman", "L. White", "M. Capdevila", "M. Fuss", "M. Leschly", "M. Lucas", "M. Lusher", "M. Maltby", "T. Ferraro"),
+  "princeton" = c("A. Barry", "A. Murphy", "B. Dawahare", "C. Cerone", "C. Kane", "D. Coomans", "D. Jovanovic", "E. Midura", "E. Rudell", "G. Rossner", "H. MacNab", "I. Garces", "K. Hamou", "K. Toomey", "K. Wong", "K. Wozniak", "L. Bryant", "P. Beaulieu", "P. Tordin", "R. Brown", "S. Kurisu", "S. Pierson", "T. McCamey", "Z. Markesini"),
+  "yale" = c("A. Bray", "A. Bryant", "A. Butcher", "A. Chang", "A. Kirschner", "A. Miller", "A. Moos", "A. Solomon", "A. Thorvaldsdottir", "A. Shamgochian", "A. So", "B. Golden", "C. Laureano", "E. Rappole", "K. Hernes", "K. Holmes", "L. Booker", "L. Jacobs", "M. Akins", "M. Phillips", "N. Yang", "P. Ryan", "R. Lundstedt", "R. Róth", "R. Exley", "T. Cahalan", "T. Teik", "V. Lundstedt")
+)
+```
+
+Load in data
+```{r}
+# create an empty data frame for outfield players and a separate one for gk
+df <- data.frame()
+gk <- data.frame()
+
+# list for new column names
+cols = c("match", "comp", "date", "pos", "min", "actions", "actions_succ", "goals", "ass", "shots", "shots_target", "xg", "pass", "pass_succ", "long", "long_succ", "cross", "cross_succ", "drib", "drib_succ", "duels", "duels_won", "aerial", "aerial_won", "interc", "loss", "loss_own", "rec", "rec_opp", "yellows", "reds")
+
+cols_gk = c("match", "comp", "date", "pos", "min", "goals_conc", "xcg", "shots_against", "saves", "saves_reflex", "exits", "long", "long_succ", "shortp", "shortp_succ", "gkicks", "short_gkick", "long_gkick")
+
+# loop through all the files
+for (team in names(teams)){
+  print(team)
+  for (player in teams[[team]]) {
+    print(player)
+  # read in data from xlsx
+    file_path <- paste0("/Users/rothrebeka/Documents/OneDrive - Yale University/Spring 2025/senior project/data/", team,  " players/Player stats ", player, ".xlsx")
+    player_df <- read_excel(file_path)
+  
+  # check is position column contains 'GK' or not
+    if (any(player_df$Position == 'GK')){
+      colnames(player_df) = cols_gk
+    } else {
+      colnames(player_df) <- cols
+    }
+  
+    player_df$player_name = player
+    player_df$team = team
+  
+    if (any(player_df$pos == 'GK')){
+      gk = rbind(gk, player_df)
+    } else {
+      df = rbind(df, player_df)
+    }
+  
+  }
+}
+```
+
+More cleaning (both for gk and outfield players)
+
+```{r}
+# remove rows (games) where minutes played is less than 15
+df = df %>%
+  filter(min >= 15)
+
+gk = gk %>%
+  group_by(player_name) %>%
+  filter(min >= 15)
+
+# removes players who don't have at least a total of 90 minutes played
+df = df %>%
+  group_by(player_name) %>%
+  filter(sum(min) >= 90)
+
+gk = gk %>%
+  group_by(player_name) %>%
+  filter(sum(min) >= 90)
+```
+
+Clean up position column
+
+```{r}
+# Position Mapping
+position_map <- list(
+  GK = "GK",
+  CB = "DEF", LCB = "DEF", RCB = "DEF", RB = "DEF", LB = "DEF",
+  LWB = "MID", RWB = "MID",
+  DMF = "MID", AMF = "MID", RCMF = "MID", LCMF = "MID",
+  RDMF = "MID", LDMF = "MID", LAMF = "MID", RAMF = "MID",
+  CF = "ATT", RWF = "ATT", LWF = "ATT", RW = "ATT", LW = "ATT"
+)
+
+# Function to map positions
+convert_position <- function(pos) {
+  pos_list <- unlist(strsplit(pos, ",\\s*"))  # Split multiple positions
+  first_pos <- pos_list[1]  # Take the first listed position
+  return(ifelse(first_pos %in% names(position_map), position_map[[first_pos]], NA))
+}
+
+df$pos <- sapply(df$pos, convert_position)
+
+# Assign most common position for missing values
+for (player in unique(df$player_name)) {
+  most_common <- names(which.max(table(df$pos[df$player_name == player])))
+  df$pos[df$player_name == player & is.na(df$pos)] <- most_common
+}
+```
+
+Create per 90 statistics
+```{r}
+# Create per 90 statistics
+# like goals_per90, xg_per90, etc..
+df = df %>%
+  mutate(
+    goals_per90 = goals/min*90,
+    shots_per90 = shots/min*90,
+    xg_per90 = xg/min*90,
+    long_per90 = long/min*90,
+    duels_per90 = duels/min*90,
+    aerial_per90 = aerial/min*90,
+    interc_per90 = interc/min*90,
+    loss_per90 = loss/min*90,
+    rec_per90 = rec/min*90,
+    pass_per90 = pass/min*90,
+    drib_per90 = drib/min*90,
+    actions_per90 = actions/min*90,
+    cross_per90 = cross/min*90,
+    ass_per90 = ass/min*90,
+    loss_own_per90 = loss_own/min*90,
+    rec_opp_per90 = rec_opp/min*90,
+    shots_target_per90 = shots_target/min*90,
+    long_succ_per90 = long_succ/min*90,
+    duels_won_per90 = duels_won/min*90,
+    aerial_won_per90 = aerial_won/min*90,
+    pass_succ_per90 = pass_succ/min*90,
+    drib_succ_per90 = drib_succ/min*90,
+    actions_succ_per90 = actions_succ/min*90,
+    cross_succ_per90 = cross_succ/min*90
+  )
+
+gk = gk %>%
+  mutate(
+    goals_conc_per90 = goals_conc/min*90,
+    xcg_per90 = xcg/min*90,
+    shots_against_per90 = shots_against/min*90,
+    saves_per90 = saves/min*90,
+    saves_reflex_per90 = saves_reflex/min*90,
+    exits_per90 = exits/min*90,
+    long_per90 = long/min*90,
+    shortp_per90 = shortp/min*90,
+    gkicks_per90 = gkicks/min*90,
+    short_gkick_per90 = short_gkick/min*90,
+    long_gkick_per90 = long_gkick/min*90,
+    shortp_succ_per90 = shortp_succ/min*90,
+    long_succ_per90 = long_succ/min*90
+  )
+```
+
+```{r}
+# create pct for shots, long, duels, aerial, pass, drib, actions, cross
+
+df = df %>%
+  mutate(
+    shots_pct = shots_target_per90/shots_per90,
+    long_pct = long_succ_per90/long_per90,
+    duels_pct = duels_won_per90/duels_per90,
+    aerial_pct = aerial_won_per90/aerial_per90,
+    pass_pct = pass_succ_per90/pass_per90,
+    drib_pct = drib_succ_per90/drib_per90,
+    actions_pct = actions_succ_per90/actions_per90,
+    cross_pct = cross_succ_per90/cross_per90
+  )
+
+gk = gk %>%
+  mutate(
+    save_pct = saves_per90/shots_against_per90,
+    shortp_pct = shortp_succ_per90/shortp_per90,
+    long_pct = long_succ_per90/long_per90,
+    short_gkick_pct = short_gkick_per90/gkicks_per90,
+    long_gkick_pct = long_gkick_per90/gkicks_per90
+  )
+```
+
+*Scatter Plots*
+
+```{r}
+scatter_plot_avg <- function(data, player_names, x, y, position = 'all', relative_to="player") {
+  
+  league_avg_x = mean(data[[x]], na.rm = TRUE)
+  league_avg_y = mean(data[[y]], na.rm = TRUE)
+  
+  axis_labels <- list(
+    "goals_per90" = "Average Number of Goals per 90 Minutes",
+    "xg_per90" = "Average Expected Goals per 90 Minutes",
+    "long_per90" = "Average number of long passes per 90 Minutes",
+    "long_pct" = "Average Long Pass Accuracy (%)",
+    "duels_per90" = "Average Number of Duels per 90 Minutes",
+    "duels_pct" = "Average Duel Success Rate (%)",
+    "shots_per90" = "Average Number of Shots per 90 Minutes",
+    "shots_pct" = "Average Shots on Target (%)",
+    "loss_per90" = "Average Number of Losses per 90 Minutes",
+    "rec_per90" = "Average Number of Recoveries per 90 Minutes",
+    "aerial_per90" = "Average Number of Aerial Duels per 90 Minutes",
+    "aerial_pct" = "Average Aerial Duel Success Rate (%)",
+    "pass_per90" = "Average Number of Passes per 90 Minutes",
+    "pass_pct" = "Average Pass Accuracy (%)",
+    "drib_per90" = "Average Number of Dribbles per 90 Minutes",
+    "drib_pct" = "Average Dribble Success Rate (%)",
+    "actions_per90" = "Average Number of Actions per 90 Minutes",
+    "actions_pct" = "Average Action Success Rate (%)",
+    "cross_per90" = "Average Number of Crosses per 90 Minutes",
+    "cross_pct" = "Average Cross Accuracy (%)"
+  )
+  
+  # Lookup table for titles
+  plot_titles <- list(
+    "goals_per90-xg_per90" = "Finishing Efficiency",
+    "long_per90-long_pct" = "Long Passing Ability",
+    "duels_per90-duels_pct" = "Duel Efficiency",
+    "shots_per90-shots_pct" = "Shooting Efficiency",
+    "loss_per90-rec_per90" = "Possession Impact",
+    "aerial_per90-aerial_pct" = "Aerial Duel Performance",
+    "pass_per90-pass_pct" = "Passing Efficiency",
+    "drib_per90-drib_pct" = "Dribbling Effectiveness",
+    "actions_per90-actions_pct" = "Overall Action Efficiency",
+    "cross_per90-cross_pct" = "Crossing Ability"
+  )
+
+  # Get axis labels and title
+  x_label <- axis_labels[[x]]
+  y_label <- axis_labels[[y]]
+  plot_title <- plot_titles[[paste(x, y, sep = "-")]]
+  
+  # Filter data based on position (if not 'all')
+  if (position != 'all') {
+    data <- data %>%
+      filter(pos == position)
+  }
+  
+  # Filter data for specified players and calculate averages for x and y
+  avg_data <- data %>%
+    filter(player_name %in% player_names) %>%
+    group_by(player_name) %>%
+    summarize(
+      x_avg = mean(!!sym(x), na.rm = TRUE),
+      y_avg = mean(!!sym(y), na.rm = TRUE)
+    )
+  
+  if (relative_to == "league"){
+    mean_x <- league_avg_x
+    mean_y <- league_avg_y
+  } else if (relative_to == "position"){
+    mean_x <- mean(data[[x]], na.rm = TRUE)
+    mean_y <- mean(data[[y]], na.rm = TRUE)
+  } else {
+    mean_x <- mean(avg_data$x_avg, na.rm = TRUE)
+    mean_y <- mean(avg_data$y_avg, na.rm = TRUE)
+  }
+  
+  print(mean_x)
+  print(mean_y)
+  
+  # Set a minimum threshold (e.g., 0.001) if the mean is 0
+  mean_x <- ifelse(mean_x == 0 | is.na(mean_x), 0.001, mean_x)
+  mean_y <- ifelse(mean_y == 0 | is.na(mean_y), 0.001, mean_y)
+                   
+  print(mean_x)
+  print(mean_y)
+  
+  axis_limits <- list(
+  "goals_per90-xg_per90" = list(x = c(0, 2*mean_x), y = c(0, 2*mean_y)),
+  "long_per90-long_pct" = list(x = c(0, 2*mean_x), y = c(0, 2*mean_y)),
+  "duels_per90-duels_pct" = list(x = c(0, 2*mean_x), y = c(0, 2*mean_y)),
+  "shots_per90-shots_pct" = list(x = c(0, 2*mean_x), y = c(0, 2*mean_y)),
+  "loss_per90-rec_per90" = list(x = c(0, 2*mean_x), y = c(0, 2*mean_y)),
+  "aerial_per90-aerial_pct" = list(x = c(0, 2*mean_x), y = c(0, 2*mean_y)),
+  "pass_per90-pass_pct" = list(x = c(0, 2*mean_x), y = c(0, 2*mean_y)),
+  "drib_per90-drib_pct" = list(x = c(0, 2*mean_x), y = c(0, 2*mean_y)),
+  "actions_per90-actions_pct" = list(x = c(0, 2*mean_x), y = c(0, 2*mean_y)),
+  "cross_per90-cross_pct" = list(x = c(0, 2*mean_x), y = c(0, 2*mean_y))
+)
+  
+  # Get axis limits for the variable pair
+  var_key <- paste(x, y, sep = "-")
+  limits <- axis_limits[[var_key]]
+  x_min <- limits$x[1]
+  x_max <- limits$x[2]
+  y_min <- limits$y[1]
+  y_max <- limits$y[2]
+  
+  # Create a fixed gradient grid (normalized)
+  x_range <- seq(0, 1, length.out = 300)
+  y_range <- seq(0, 1, length.out = 300)
+  grid_data <- expand.grid(x_norm = x_range, y_norm = y_range)
+  
+  # Map the normalized grid back to plot coordinates
+  grid_data$x_plot <- grid_data$x_norm * (x_max - x_min) + x_min
+  grid_data$y_plot <- grid_data$y_norm * (y_max - y_min) + y_min
+  
+  # Define color gradient orientation
+  if (var_key == "loss_per90-rec_per90") {
+    # Flip gradient for this specific plot (red in bottom right, green in top left)
+    grid_data$fill_value <- 1 - (grid_data$x_norm - grid_data$y_norm) / 2
+  } else {
+    grid_data$fill_value <- (grid_data$x_norm + grid_data$y_norm) / 2
+  }
+  
+  # Compute aspect ratio based on axis limits
+  aspect_ratio <- (x_max - x_min) / (y_max - y_min)
+
+  # Plot
+  ggplot() +
+    geom_raster(data = grid_data, aes(x = x_plot, y = y_plot, fill = fill_value)) +
+    scale_fill_gradientn(colors = c("red", "yellow", "green")) +
+    geom_point(data = avg_data, aes(x = x_avg, y = y_avg), color = "black", size = 3) +
+    geom_text_repel(data = avg_data, aes(x = x_avg, y = y_avg, label = player_name), 
+                    size = 3, max.overlaps = 10) + 
+    theme_minimal() +
+    labs(
+      title = plot_title,
+      x = x_label,
+      y = y_label
+    ) +
+    theme(legend.position = "none") +
+    scale_x_continuous(limits = c(x_min, x_max), expand = c(0, 0), oob = squish) +
+    scale_y_continuous(limits = c(y_min, y_max), expand = c(0, 0), oob = squish) +
+    coord_fixed(ratio = aspect_ratio)
+}
+```
+
+```{r}
+create_player_plots <- function(data, player_name, position = "all") {
+  
+  # Define variable pairs for plotting
+  plot_pairs <- list(
+    c("goals_per90", "xg_per90"),
+    c("long_per90", "long_pct"),
+    c("duels_per90", "duels_pct"),
+    c("shots_per90", "shots_pct"),
+    c("loss_per90", "rec_per90"),
+    c("aerial_per90", "aerial_pct"),
+    c("pass_per90", "pass_pct"),
+    c("drib_per90", "drib_pct"),
+    c("actions_per90", "actions_pct"),
+    c("cross_per90", "cross_pct")
+  )
+  
+  # Loop through each variable pair
+  plot_list <- list()
+  for (pair in plot_pairs) {
+    x <- pair[1]
+    y <- pair[2]
+    
+    plot <- scatter_plot_avg(data, player_name, x, y, position, relative_to="player")
+    
+    # Store the plot in the list
+    plot_list[[paste0(x, "_vs_", y)]] <- plot
+  }
+  
+  # Return the list of plots
+  return(plot_list)
+}
+
+```
+
+```{r}
+plots <- create_player_plots(df, c("A. Miller", "R. Róth", "E. Rappole"), "MID")
+
+# Display the plots
+for (plot_name in names(plots)) {
+  print(plots[[plot_name]])
+}
+
+```
+
+```{r}
+# create plots for all yale players
+scatter_plot_avg(df, c("L. Booker", "R. Róth", "A. Miller"), "long_per90", "long_pct", 'MID', "player")
+```
+
+GK scatters
+
+```{r}
+scatter_plot_gk <- function(data, player_names, x, y){
+  axis_labels <- list(
+    "goals_conc_per90" = "Average Number of Goals Conceded per 90 Minutes",
+    "xcg_per90" = "Average Expected Conceded Goals per 90 Minutes",
+    "long_per90" = "Average number of long passes per 90 Minutes",
+    "long_pct" = "Average Long Pass Accuracy (%)",
+    "shortp_per90" = "Average Number of Short Passes per 90 Minutes",
+    "shortp_pct" = "Average Short Pass Accuracy (%)",
+    "saves_per90" = "Average Number of Saves per 90 Minutes",
+    "save_pct" = "Average Save Percentage (%)",
+    "exits_per90" = "Average Number of Exits per 90 Minutes"
+  )
+  
+  # Lookup table for titles
+  plot_titles <- list(
+    "goals_conc_per90-xcg_per90" = "Goals Conceded vs Expected Goals Conceded",
+    "long_per90-long_pct" = "Long Passing Ability",
+    "shortp_per90-shortp_pct" = "Short Passing Ability",
+    "saves_per90-save_pct" = "Saving Efficiency",
+    "exits_per90-saves_per90" = "Distribution of Goaltending Actions"
+  )
+  
+  # Get axis labels and title
+  x_label <- axis_labels[[x]]
+  y_label <- axis_labels[[y]]
+  plot_title <- plot_titles[[paste(x, y, sep = "-")]]
+  
+  # Filter data for specified players and calculate averages for x and y
+  avg_data <- data %>%
+    filter(player_name %in% player_names) %>%
+    group_by(player_name) %>%
+    summarize(
+      x_avg = mean(!!sym(x), na.rm = TRUE),
+      y_avg = mean(!!sym(y), na.rm = TRUE)
+    )
+  
+  axis_limits <- list(
+    "goals_conc_per90-xcg_per90" = list(x = c(0, 2*mean(avg_data$x_avg, na.rm = TRUE)), y = c(0, 2*mean(avg_data$y_avg, na.rm = TRUE))),
+    "long_per90-long_pct" = list(x = c(0, 2*mean(avg_data$x_avg, na.rm = TRUE)), y = c(0, 2*mean(avg_data$y_avg, na.rm = TRUE))),
+    "shortp_per90-shortp_pct" = list(x = c(0, 2*mean(avg_data$x_avg, na.rm = TRUE)), y = c(0, 2*mean(avg_data$y_avg, na.rm = TRUE))),
+    "saves_per90-save_pct" = list(x = c(0, 2*mean(avg_data$x_avg, na.rm = TRUE)), y = c(0, 2*mean(avg_data$y_avg, na.rm = TRUE))),
+    "exits_per90-saves_per90" = list(x = c(0, 2*mean(avg_data$x_avg, na.rm = TRUE)), y = c(0, 2*mean(avg_data$y_avg, na.rm = TRUE))))
+  
+  # Get axis limits for the variable pair
+  var_key <- paste(x, y, sep = "-")
+  limits <- axis_limits[[var_key]]
+  x_min <- limits$x[1]
+  x_max <- limits$x[2]
+  y_min <- limits$y[1]
+  y_max <- limits$y[2]
+  
+  # Create a fixed gradient grid (normalized)
+  x_range <- seq(0, 1, length.out = 300)
+  y_range <- seq(0, 1, length.out = 300)
+  grid_data <- expand.grid(x_norm = x_range, y_norm = y_range)
+  
+  # Map the normalized grid back to plot coordinates
+  grid_data$x_plot <- grid_data$x_norm * (x_max - x_min) + x_min
+  grid_data$y_plot <- grid_data$y_norm * (y_max - y_min) + y_min
+  
+  # Define color gradient orientation
+  if (var_key == "goals_conc_per90-xcg_per90") {
+    # Flip gradient for this specific plot (green in bottom left, red in top right)
+    grid_data$fill_value <- (1 - (grid_data$x_norm - grid_data$y_norm)) / 2
+  } else {
+    grid_data$fill_value <- (grid_data$x_norm + grid_data$y_norm) / 2
+  }
+  
+  # Compute aspect ratio based on axis limits
+  aspect_ratio <- (x_max - x_min) / (y_max - y_min)
+
+  # Plot
+  ggplot() +
+    geom_raster(data = grid_data, aes(x = x_plot, y = y_plot, fill = fill_value)) +
+    scale_fill_gradientn(colors = c("red", "yellow", "green")) +
+    geom_point(data = avg_data, aes(x = x_avg, y = y_avg), color = "black", size = 3) +
+    geom_text_repel(data = avg_data, aes(x = x_avg, y = y_avg, label = player_name), 
+                    size = 3, max.overlaps = 10) + 
+    theme_minimal() +
+    labs(
+      title = plot_title,
+      x = x_label,
+      y = y_label
+    ) +
+    theme(legend.position = "none") +
+    scale_x_continuous(limits = c(x_min, x_max), expand = c(0, 0), oob = squish) +
+    scale_y_continuous(limits = c(y_min, y_max), expand = c(0, 0), oob = squish) +
+    coord_fixed(ratio = aspect_ratio)
+}
+```
+
+
+```{r}
+scatter_plot_gk(gk, c("K. Holmes", "A. Shamgochian"),  "goals_conc_per90", "xcg_per90")
+```
+
+
+
+
+*Radar Plots*
+
+```{r}
+# Data for radar plot (average values for each player)
+avg_data <- df %>%
+  group_by(player_name) %>%
+  summarize(
+    goals_per90 = mean(goals_per90, na.rm = TRUE),
+    shots_per90 = mean(shots_per90, na.rm = TRUE),
+    xg_per90 = mean(xg_per90, na.rm = TRUE),
+    ass_per90 = mean(ass_per90, na.rm = TRUE),
+    interc_per90 = mean(interc_per90, na.rm = TRUE),
+    aerial_pct = mean(aerial_pct, na.rm = TRUE),
+    rec_opp_per90 = mean(rec_opp_per90, na.rm = TRUE),
+    loss_own_per90 = mean(loss_own_per90, na.rm = TRUE),
+    pass_pct = mean(pass_pct, na.rm = TRUE),
+    drib_pct = mean(drib_pct, na.rm = TRUE),
+    cross_pct = mean(cross_pct, na.rm = TRUE),
+    long_pct = mean(long_pct, na.rm = TRUE))
+
+# Compute min and max values for each variable
+min_vals <- avg_data %>%
+  summarise(across(where(is.numeric), min, na.rm = TRUE)) %>%
+  mutate(player_name = "Min")
+
+max_vals <- avg_data %>%
+  summarise(across(where(is.numeric), max, na.rm = TRUE)) %>%
+  mutate(player_name = "Max")
+
+# Bind min, max, and actual data
+radar_data <- bind_rows(max_vals, min_vals, avg_data)
+```
+
+Function for plotting 2 players charts.
+```{r}
+plot_radar <- function(radar_data, player1, player2) {
+  # Subset data for the two selected players along with min/max
+  radar_subset <- radar_data %>%
+    filter(player_name %in% c("Min", "Max", player1, player2))
+  
+  # Rename variables for better readability
+  var_labels <- c(
+    "goals_per90" = "Goals/90", "ass_per90" = "Assists/90", "xg_per90" = "xG/90", "shots_per90" = "Shots/90",
+    "interc_per90" = "Interceptions/90", "loss_own_per90" = "Losses Own Half/90", "rec_opp_per90" = "Recoveries Opp Half/90", "aerial_pct" = "Aerial Win %",
+    "pass_pct" = "Pass Accuracy", "long_pct" = "Long Pass Accuracy", "cross_pct" = "Cross Accuracy", "drib_pct" = "Dribble Success %"
+  )
+  
+  # Function to generate radar plots for a given category of variables
+  create_radar <- function(vars, title) {
+    radar_values <- radar_subset %>%
+      select(player_name, all_of(vars)) %>%
+      rename_with(~ var_labels[.x], .cols = all_of(vars)) %>%
+      column_to_rownames(var = "player_name")
+    
+    # Convert to matrix format required by radarchart
+    radar_matrix <- as.data.frame(radar_values)
+    radarchart(radar_matrix, axistype = 0,
+               pty = 32,
+               pcol = c("red", "blue"), pfcol = c(rgb(1,0,0,0.4), rgb(0,0,1,0.4)),
+               plty = c(1, 1),
+               plwd = 2, title = title,
+               cglcol = "gray", cglty = 1, cglwd = 0.8,  # Customize grid lines
+               vlcex = 1.2 # Adjust label size
+               )  
+  }
+  
+  # Create the three radar plots
+  par(mfrow = c(1, 3))  # Arrange plots in a row
+  create_radar(c("goals_per90", "ass_per90", "xg_per90", "shots_per90"), "Attacking")
+  create_radar(c("interc_per90", "loss_own_per90", "rec_opp_per90", "aerial_pct"), "Defending")
+  create_radar(c("pass_pct", "long_pct", "cross_pct", "drib_pct"), "Playmaking")
+  
+  # Add legend
+  legend("topright", legend = c(player1, player2), col = c("red", "blue"), pch = 15, pt.cex = 2, bty = "n")
+}
+
+```
+
+
+```{r}
+# Example usage:
+plot_radar(radar_data, "R. Róth", "T. Cahalan")
+
+```
+
+GK radar charts
+
+```{r}
+avg_data_gk = gk %>%
+  group_by(player_name) %>%
+  summarize(
+    goals_conc_per90 = mean(goals_conc_per90, na.rm = TRUE),
+    xcg_per90 = mean(xcg_per90, na.rm = TRUE),
+    shots_against_per90 = mean(shots_against_per90, na.rm = TRUE),
+    save_pct = mean(save_pct, na.rm = TRUE),
+    saves_reflex_per90 = mean(saves_reflex_per90, na.rm = TRUE),
+    exits_per90 = mean(exits_per90, na.rm = TRUE),
+    long_per90 = mean(long_per90, na.rm = TRUE),
+    long_pct = mean(long_pct, na.rm = TRUE),
+    shortp_per90 = mean(shortp_per90, na.rm = TRUE),
+    shortp_pct = mean(shortp_pct, na.rm = TRUE),
+    short_gkick_per90 = mean(short_gkick_per90, na.rm = TRUE),
+    long_gkick_per90 = mean(long_gkick_per90, na.rm = TRUE)
+  )
+
+# Compute min and max values for each variable
+min_vals_gk <- avg_data_gk %>%
+  summarise(across(where(is.numeric), min, na.rm = TRUE)) %>%
+  mutate(player_name = "Min")
+
+max_vals_gk <- avg_data_gk %>%
+  summarise(across(where(is.numeric), max, na.rm = TRUE)) %>%
+  mutate(player_name = "Max")
+
+# Bind min, max, and actual data
+radar_data_gk <- bind_rows(max_vals_gk, min_vals_gk, avg_data_gk)
+```
+
+
+```{r}
+plot_radar_gk <- function(radar_data, player1, player2) {
+  # Subset data for the two selected players along with min/max
+  radar_subset <- radar_data %>%
+    filter(player_name %in% c("Min", "Max", player1, player2))
+  
+  # Rename variables for better readability
+  var_labels <- c(
+    "goals_conc_per90" = "Goals Conceded/90", "xcg_per90" = "xG Conceded/90", "shots_against_per90" = "Shots Against/90",
+    "save_pct" = "Save %", "saves_reflex_per90" = "Saves Reflexes/90", "exits_per90" = "Exits/90",
+    "long_per90" = "Long Passes/90", "long_pct" = "Long Pass Accuracy",
+    "shortp_per90" = "Short Passes/90", "shortp_pct" = "Short Pass Accuracy",
+    "short_gkick_per90" = "Short Goal Kicks/90", "long_gkick_per90" = "Long Goal Kicks/90"
+  )
+  
+  # Function to generate radar plots for a given category of variables
+  create_radar <- function(vars, title) {
+    radar_values <- radar_subset %>%
+      select(player_name, all_of(vars)) %>%
+      rename_with(~ var_labels[.x], .cols = all_of(vars)) %>%
+      column_to_rownames(var = "player_name")
+    
+    # Convert to matrix format required by radarchart
+    radar_matrix <- as.data.frame(radar_values)
+    radarchart(radar_matrix, axistype = 0,
+               pty = 32,
+               pcol = c("red", "blue"), pfcol = c(rgb(1,0,0,0.4), rgb(0,0,1,0.4)),
+               plty = c(1, 1),
+               plwd = 2, title = title,
+               cglcol = "gray", cglty = 1, cglwd = 0.8,  # Customize grid lines
+               vlcex = 1.2 # Adjust label size
+    )  
+  }
+  
+  # Create the three radar plots
+  par(mfrow = c(1, 2))  # Arrange plots in
+  create_radar(c("goals_conc_per90", "xcg_per90", "shots_against_per90", "save_pct", "saves_reflex_per90", "exits_per90"), "Goalkeeping")
+  create_radar(c("long_per90", "long_pct", "shortp_per90", "shortp_pct", "short_gkick_per90", "long_gkick_per90"), "Possession")
+  
+  # Add legend
+  legend("topright", legend = c(player1, player2), col = c("red", "blue"), pch = 15, pt.cex = 2, bty = "n")
+}
+```
+
+
+```{r}
+plot_radar_gk(radar_data_gk, "K. Holmes", "A. Shamgochian")
+```
+
+
+
+

@@ -1,0 +1,544 @@
+---
+title: "team_plots"
+author: "Rebeka Róth"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(fmsb)
+library(scales)
+library(ggforce)
+library(ggshakeR)
+```
+
+```{r}
+teams = c("Brown Bears", "Columbia Lions", "Cornell Big Red", "Dartmouth Big Green", "Harvard Crimson", "Penn Quakers", "Princeton Tigers", "Yale Bulldogs")
+
+seasons = c("2021", "2022", "2023", "2024")
+```
+
+```{r}
+dt = data.frame()
+col_names = c("date", "match", "comp", "duration", "team", "scheme", "goals", "xg", "shots", "shots_on_target", "shots_pct", "passes", "passes_accurate", "pass_pct", "poss_pct", "losses", "losses_low", "losses_med", "losses_high", "rec", "rec_low", "rec_med", "rec_high", "duels", "duels_won", "duels_pct")
+
+# example file location and name: /Users/rothrebeka/Documents/OneDrive - Yale University/Spring 2025/senior project/data/team stats/Team Stats Brown Bears 2021.xlsx
+
+for (team in teams) {
+  for (season in seasons) {
+    file = paste0("/Users/rothrebeka/Documents/OneDrive - Yale University/Spring 2025/senior project/data/team stats/Team Stats ", team, " ", season, ".xlsx")
+    data = read_excel(file)
+    
+    # get rid of first two rows
+    data = data[-c(1, 2), ]
+    
+    # apply column names
+    colnames(data) = col_names
+    data$season = season
+    dt = rbind(dt, data)
+  }
+}
+
+# Remove duplicates
+dt = dt %>% unique()
+
+```
+
+
+```{r}
+# Create new columns (opp.goals, opp.xg, etc)
+# Make them be empty
+# Take odd and even rows and fill them with appropaite values such as df[odd.rows, opp.cols] = df[even.rows, team.cols]
+
+team_cols = c("goals", "xg", "shots", "shots_on_target", "shots_pct", "passes", "passes_accurate", "pass_pct", "poss_pct", "losses", "losses_low", "losses_med", "losses_high", "rec", "rec_low", "rec_med", "rec_high", "duels", "duels_won", "duels_pct")
+opp_cols = paste0("opp.", team_cols)
+
+dt[opp_cols] = NA
+
+odd_rows = seq(1, nrow(dt), by = 2)
+even_rows = seq(2, nrow(dt), by = 2)
+
+dt[odd_rows, opp_cols] = dt[even_rows, team_cols]
+dt[even_rows, opp_cols] = dt[odd_rows, team_cols]
+
+```
+
+```{r}
+# Create new columns for home team and away team
+# split on hyphen in match column
+# get rid of result (everything after last space)
+# team before hyphen is home team, team after hyphen is away team
+
+dt = dt %>%
+  mutate(match = str_remove(match, "\\s\\d+:\\d+$")) %>% # Remove result
+  separate(match, into = c("home_team", "away_team"), sep = " - ")
+```
+
+Filter for teams that are in Ivy
+```{r}
+dt = dt %>%
+  filter(team %in% teams)
+```
+
+*Bar Charts*
+
+Create bar charts for the following variables:
+goals
+xG
+shots on target
+pass percentage 
+possession percentage
+losses low third
+recoveries high third
+duels won percentage
+opponent goals
+opponent xg 
+opponent shots on target 
+
+All bar charts should include averages for all Ivy 8 teams. Make sure to color Yale's chart Blue, other teams charts should be grey. Add label to each bar as well as the actual value.
+
+```{r}
+# Create a function that creates a bar chart for a given variable
+# Function to create bar charts with averaging options
+
+# Function to create horizontal bar charts with Yale in blue
+plot_bar_chart <- function(df, var, var_label, seasons = "2024", n_games=NULL) {
+
+  if (is.null(n_games)){
+    df <- df %>%
+      filter(season == seasons)
+  } else {
+    df <- df %>%
+      group_by(team) %>%
+      top_n(n_games, wt = date)
+  }
+  
+  avg <- df %>%
+  group_by(team) %>%
+  summarise(avg = mean(!!sym(var), na.rm = TRUE))
+  
+  
+  # Plot
+  ggplot(avg, aes(x = avg, y = reorder(team, avg), fill = team)) +
+    geom_bar(stat = "identity") +
+    geom_text(aes(label = round(avg, 2)), hjust = -0.1, size = 3) +
+    labs(title = paste0("Average ", var_label, " by Team"),
+         x = var_label,
+         y = "Team") +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_manual(values = c("Brown Bears" = "grey", "Columbia Lions" = "grey", "Cornell Big Red" = "grey", "Dartmouth Big Green" = "grey", "Harvard Crimson" = "grey", "Penn Quakers" = "grey", "Princeton Tigers" = "grey", "Yale Bulldogs" = "#0f4d92"))
+}
+
+```
+
+```{r}
+# Example Call
+plot_bar_chart(dt, "goals", "Goals", season="2022", n_games=10)
+```
+
+```{r}
+vars <- c("goals", "xg", "shots_on_target", "pass_pct", "poss_pct",
+          "losses_low", "rec_high", "duels_pct",
+          "opp.goals", "opp.xg", "opp.shots_on_target")
+
+var_labels <- c("Goals", "Expected Goals (xG)", "Shots on Target", "Pass Percentage", 
+                "Possession Percentage", "Losses in Low Third", "Recoveries in High Third", 
+                "Duels Won Percentage", "Opponent Goals", "Opponent xG", "Opponent Shots on Target")
+
+# create bar charts for all variables
+for (i in 1:length(vars)) {
+  plot = plot_bar_chart(dt, vars[i], var_labels[i], seasons="2021", n_games=10)
+  print(plot)
+}
+```
+
+
+*Radar Plots*
+
+Attacking	                Defending
+goals	                losses in low third
+xG	                opponents shots on target
+shots on target	    recoveries in high third
+accurate passes	        opponents xg
+possession            percentage	duels won
+shots	                opponents goals
+
+```{r}
+# Data for radar plot (average values for each team)
+avg_data_team = dt %>%
+  group_by(team) %>%
+  summarise(goals = mean(goals, na.rm = TRUE),
+            xg = mean(xg, na.rm = TRUE),
+            shots_on_target = mean(shots_on_target, na.rm = TRUE),
+            passes_accurate = mean(passes_accurate, na.rm = TRUE),
+            poss_pct = mean(poss_pct, na.rm = TRUE),
+            shots = mean(shots, na.rm = TRUE),
+            losses_low = mean(losses_low, na.rm = TRUE),
+            rec_high = mean(rec_high, na.rm = TRUE),
+            duels_won = mean(duels_won, na.rm = TRUE),
+            opp.goals = mean(opp.goals, na.rm = TRUE),
+            opp.xg = mean(opp.xg, na.rm = TRUE),
+            opp.shots_on_target = mean(opp.shots_on_target, na.rm = TRUE))
+
+# Compute GLOBAL min/max values (ensuring consistency across plots)
+global_min_vals <- avg_data_team %>%
+  summarise(across(where(is.numeric), min, na.rm = TRUE)) %>%
+  mutate(team = "Min")
+
+global_max_vals <- avg_data_team %>%
+  summarise(across(where(is.numeric), max, na.rm = TRUE)) %>%
+  mutate(team = "Max")
+
+# Variables to flip (low values are better)
+flip_vars <- c("losses_low", "opp.goals", "opp.xg", "opp.shots_on_target")
+
+# Normalize function
+normalize <- function(x, min_x, max_x) {
+  (x - min_x) / (max_x - min_x)
+}
+
+# Normalize all values using GLOBAL min/max
+normalize_data <- function(df, min_vals, max_vals, flip_vars) {
+  df_norm <- df
+  for (col in names(df)[-1]) {  # Exclude "team" column
+    df_norm[[col]] <- normalize(df[[col]], min_vals[[col]], max_vals[[col]])
+
+    # Flip selected defensive variables
+    if (col %in% flip_vars) {
+      df_norm[[col]] <- 1 - df_norm[[col]]
+    }
+  }
+  return(df_norm)
+}
+
+# Normalize data
+avg_data_team_norm <- normalize_data(avg_data_team, global_min_vals, global_max_vals, flip_vars)
+
+# Ensure min/max values are properly scaled
+global_min_vals[-ncol(global_min_vals)] <- 0  # Exclude "team" column
+global_max_vals[-ncol(global_min_vals)] <- 1
+
+# Bind datasets together
+radar_data_team <- rbind(global_min_vals, global_max_vals, avg_data_team_norm)
+
+
+```
+
+
+```{r}
+plot_radar_team <- function(radar_data, team1="Yale Bulldogs", team2){
+  radar_subset = radar_data %>%
+    filter(team %in% c("Min", "Max", team1, team2))
+  
+  # Rename variables for better readability
+  var_labels = c("goals" = "Goals", "xg" = "Expected Goals (xG)", "shots_on_target" = "Shots on Target", "passes_accurate" = "Accurate Passes", "poss_pct" = "Possession Percentage", "shots" = "Shots", "losses_low" = "Losses in Low Third", "rec_high" = "Recoveries in High Third", "duels_won" = "Duels Won", "opp.goals" = "Opponent Goals", "opp.xg" = "Opponent xG", "opp.shots_on_target" = "Opponent Shots on Target")
+  
+  # Function to generate radar plots for a given category of variables
+  create_radar <- function(vars, title) {
+    radar_values <- radar_subset %>%
+      select(team, all_of(vars)) %>%
+      rename_with(~ var_labels[.x], .cols = all_of(vars)) %>%
+      column_to_rownames(var = "team")
+    
+    # Convert to matrix format required by radarchart
+    radar_matrix <- as.data.frame(radar_values)
+    radarchart(radar_matrix, axistype = 0,
+               pty = 32,
+               pcol = c("red", "blue"), pfcol = c(rgb(1,0,0,0.4), rgb(0,0,1,0.4)),
+               plty = c(1, 1),
+               plwd = 2, title = title,
+               cglcol = "gray", cglty = 1, cglwd = 0.8,  # Customize grid lines
+               vlcex = 1.2 # Adjust label size
+    )
+  }
+  
+  # Create radar plots for attacking and defending variables
+  par(mfrow = c(1, 2))
+  create_radar(c("goals", "xg", "shots_on_target", "passes_accurate", "poss_pct", "shots"), "Attacking")
+  create_radar(c("losses_low", "rec_high", "duels_won", "opp.goals", "opp.xg", "opp.shots_on_target"), "Defending")
+  
+  # Add legend
+  legend("topright", legend = c(team1, team2), fill = c("red", "blue"), pch = 15, pt.cex = 2, bty = "n")
+}
+```
+
+```{r}
+plot_radar_team(radar_data_team, "Yale Bulldogs", "Princeton Tigers")
+```
+
+
+Radar charts using ggplot
+
+```{r}
+plot_radar_team2 <- function(dt, team1 = "Yale Bulldogs", team2) {
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+  library(scales)
+  library(ggforce)  # for coord_radar
+
+  # --- 1. Aggregate team stats ---
+  avg_data_team <- dt %>%
+    group_by(team) %>%
+    summarise(across(c(goals, xg, shots_on_target, passes_accurate,
+                       poss_pct, shots, losses_low, rec_high,
+                       duels_won, opp.goals, opp.xg, opp.shots_on_target),
+                     ~ mean(.x, na.rm = TRUE)))
+
+  # --- 2. Global min/max for normalization ---
+  global_min_vals <- avg_data_team %>%
+    summarise(across(where(is.numeric), min)) %>%
+    mutate(team = "Min")
+
+  global_max_vals <- avg_data_team %>%
+    summarise(across(where(is.numeric), max)) %>%
+    mutate(team = "Max")
+
+  # --- 3. Normalize & flip values ---
+  flip_vars <- c("losses_low", "opp.goals", "opp.xg", "opp.shots_on_target")
+
+  normalize_data <- function(df, min_vals, max_vals, flip_vars) {
+    norm_df <- df
+    for (col in names(df)[-1]) {
+      norm_df[[col]] <- (df[[col]] - min_vals[[col]]) / (max_vals[[col]] - min_vals[[col]])
+      if (col %in% flip_vars) {
+        norm_df[[col]] <- 1 - norm_df[[col]]
+      }
+    }
+    return(norm_df)
+  }
+
+  avg_data_team_norm <- normalize_data(avg_data_team, global_min_vals, global_max_vals, flip_vars)
+
+  # --- 4. Filter for selected teams ---
+  radar_subset <- avg_data_team_norm %>%
+    filter(team %in% c(team1, team2))
+
+  # --- 5. Reshape to long format ---
+  radar_long <- radar_subset %>%
+    pivot_longer(-team, names_to = "metric", values_to = "value")
+
+  # Better labels
+  var_labels <- c("goals" = "Goals", "xg" = "Expected Goals (xG)", "shots_on_target" = "Shots on Target", 
+                  "passes_accurate" = "Accurate Passes", "poss_pct" = "Possession %", 
+                  "shots" = "Shots", "losses_low" = "Losses in Low Third", "rec_high" = "Recoveries High", 
+                  "duels_won" = "Duels Won", "opp.goals" = "Opponent Goals", "opp.xg" = "Opponent xG", 
+                  "opp.shots_on_target" = "Opponent Shots on Target")
+
+  radar_long$metric_label <- factor(var_labels[radar_long$metric], levels = var_labels)
+
+  # --- 6. Split into attacking and defending plots ---
+  attacking_vars <- c("Goals", "Expected Goals (xG)", "Shots on Target", 
+                      "Accurate Passes", "Possession %", "Shots")
+  defending_vars <- c("Losses in Low Third", "Recoveries High", "Duels Won", 
+                      "Opponent Goals", "Opponent xG", "Opponent Shots on Target")
+
+  # --- 7. Plotting function ---
+  plot_radar <- function(df, category, title) {
+    ggplot(df %>% filter(metric_label %in% category), 
+           aes(x = metric_label, y = value, group = team, color = team, fill = team)) +
+      geom_polygon(alpha = 0.3, linewidth = 1.2) +
+      geom_point(size = 3) +
+      coord_polar() +
+      theme_minimal(base_size = 12) +
+      theme(axis.text.x = element_text(size = 10, face = "bold", angle = 5),
+            panel.grid = element_line(color = "gray85"),
+            legend.position = "top") +
+      labs(title = title, x = NULL, y = NULL)
+  }
+
+  # --- 8. Plot side by side ---
+  p1 <- plot_radar(radar_long, attacking_vars, "Attacking Metrics")
+  p2 <- plot_radar(radar_long, defending_vars, "Defending Metrics")
+
+  # Display plots side-by-side
+  gridExtra::grid.arrange(p1, p2, ncol = 2)
+}
+
+```
+
+
+```{r}
+plot_radar_team2(dt, "Yale Bulldogs", "Princeton Tigers")
+```
+
+Another style
+
+```{r}
+plot_radar_team3 <- function(dt, team1 = "Yale Bulldogs", team2) {
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+  library(scales)
+  library(ggforce)  # for coord_radar
+  library(ggshakeR)  # for plot_pizza
+
+  data1 <- dt %>%
+    filter(team == team1) %>%
+    select(goals, xg, shots_on_target, passes_accurate,
+           poss_pct, shots, losses_low, rec_high,
+           duels_won, opp.goals, opp.xg, opp.shots_on_target)
+  
+  data2 <- dt %>%
+    filter(team == team2) %>%
+    select(goals, xg, shots_on_target, passes_accurate,
+           poss_pct, shots, losses_low, rec_high,
+           duels_won, opp.goals, opp.xg, opp.shots_on_target)
+  # Combine data for both teams
+  data <- rbind(data1, data2)
+  data$team <- c(team1, team2)
+  
+  # Comparison plot using plot_pizza
+  comp_pizza <- plot_pizza(
+    data = data,
+    type = "comparison", 
+    template = "custom",
+    player_1 = team1, 
+    player_2 = team2, 
+    season_player_1 = "Last 365 Days Men's Big 5 Leagues, UCL, UEL", 
+    season_player_2 = "Last 365 Days Men's Big 5 Leagues, UCL, UEL",
+    color_compare = "#41ab5d", 
+    theme = "black"
+  )
+
+  # --- 7. Return or display the comparison plot ---
+  comp_pizza
+}
+
+```
+
+
+```{r}
+plot_radar_team3(dt, "Yale Bulldogs", "Princeton Tigers")
+```
+
+
+```{r}
+plot_radar_team_og <- function(dt, team1, team2) {
+  
+  # Data for radar plot (average values for each team)
+  avg_data_team <- dt %>%
+    group_by(team) %>%
+    summarise(goals = mean(goals, na.rm = TRUE),
+              xg = mean(xg, na.rm = TRUE),
+              shots_on_target = mean(shots_on_target, na.rm = TRUE),
+              passes_accurate = mean(passes_accurate, na.rm = TRUE),
+              poss_pct = mean(poss_pct, na.rm = TRUE),
+              shots = mean(shots, na.rm = TRUE),
+              losses_low = mean(losses_low, na.rm = TRUE),
+              rec_high = mean(rec_high, na.rm = TRUE),
+              duels_won = mean(duels_won, na.rm = TRUE),
+              opp.goals = mean(opp.goals, na.rm = TRUE),
+              opp.xg = mean(opp.xg, na.rm = TRUE),
+              opp.shots_on_target = mean(opp.shots_on_target, na.rm = TRUE))
+  
+  # Compute GLOBAL min/max values (ensuring consistency across plots)
+  global_min_vals <- avg_data_team %>%
+    summarise(across(where(is.numeric), min, na.rm = TRUE)) %>%
+    mutate(team = "Min")
+  
+  global_max_vals <- avg_data_team %>%
+    summarise(across(where(is.numeric), max, na.rm = TRUE)) %>%
+    mutate(team = "Max")
+  
+  # Variables to flip (low values are better)
+  flip_vars <- c("losses_low", "opp.goals", "opp.xg", "opp.shots_on_target")
+  
+  # Normalize function
+  normalize <- function(x, min_x, max_x) {
+    (x - min_x) / (max_x - min_x)
+  }
+  
+  # Normalize all values using GLOBAL min/max
+  normalize_data <- function(df, min_vals, max_vals, flip_vars) {
+    df_norm <- df
+    for (col in names(df)[-1]) {  # Exclude "team" column
+      df_norm[[col]] <- normalize(df[[col]], min_vals[[col]], max_vals[[col]])
+      
+      # Flip selected defensive variables
+      if (col %in% flip_vars) {
+        df_norm[[col]] <- 1 - df_norm[[col]]
+      }
+    }
+    return(df_norm)
+  }
+  
+  # Normalize data
+  avg_data_team_norm <- normalize_data(avg_data_team, global_min_vals, global_max_vals, flip_vars)
+  
+  min_row <- as.data.frame(t(rep(0, ncol(avg_data_team_norm) - 1)))
+  names(min_row) <- names(avg_data_team_norm)[-1]
+  min_row$team <- "Min"
+
+  max_row <- as.data.frame(t(rep(1, ncol(avg_data_team_norm) - 1)))
+  names(max_row) <- names(avg_data_team_norm)[-1]
+  max_row$team <- "Max"
+
+  # Bind normalized data with proper 0/1 min/max rows
+  radar_data_team <- rbind(min_row, max_row, avg_data_team_norm)
+
+  radar_subset <- radar_data_team %>%
+    filter(team %in% c("Min", "Max", team1, team2))
+  
+  print(radar_subset)  # Check the radar_subset data frame for debugging
+  
+  # Rename variables for better readability
+  var_labels <- c("goals" = "Goals", "xg" = "Expected Goals (xG)", "shots_on_target" = "Shots on Target", 
+                  "passes_accurate" = "Accurate Passes", "poss_pct" = "Possession Percentage", 
+                  "shots" = "Shots", "losses_low" = "Losses in Low Third", "rec_high" = "Recoveries in High Third", 
+                  "duels_won" = "Duels Won", "opp.goals" = "Opponent Goals", "opp.xg" = "Opponent xG", 
+                  "opp.shots_on_target" = "Opponent Shots on Target")
+  
+  # Function to generate radar plots for a given category of variables
+  create_radar <- function(vars, title) {
+    radar_values <- radar_subset %>%
+      select(team, all_of(vars)) %>%
+      rename_with(~ var_labels[.x], .cols = all_of(vars)) %>%
+      column_to_rownames(var = "team")
+    
+    # Make sure the row order is Min, Max, team1, team2
+    row_order <- c("Min", "Max", team1, team2)
+    existing_rows <- intersect(row_order, rownames(radar_values))
+    radar_matrix <- radar_values[existing_rows, , drop = FALSE]
+    
+    # Convert to matrix format required by radarchart
+    radar_matrix <- as.data.frame(radar_values)
+    radarchart(radar_matrix, axistype = 0,
+               pty = 32,
+               pcol = c("red", "blue"), pfcol = c(rgb(1,0,0,0.4), rgb(0,0,1,0.4)),
+               plty = c(1, 1),
+               plwd = 2, title = title,
+               cglcol = "gray", cglty = 1, cglwd = 0.8,  # Customize grid lines
+               vlcex = 1 # Adjust label size
+    )
+  }
+  
+  # Create radar plots for attacking and defending variables
+  par(mfrow = c(1, 2), mar = c(1, 2, 2, 2), oma = c(0, 1, 2, 1))
+  create_radar(c("goals", "xg", "shots_on_target", "passes_accurate", "poss_pct", "shots"), "Attacking")
+  create_radar(c("losses_low", "rec_high", "duels_won", "opp.goals", "opp.xg", "opp.shots_on_target"), "Defending")
+  
+  # Add legend
+  legend("topright", legend = c(team1, team2), fill = c("red", "blue"), pch = 15, pt.cex = 2, bty = "n")
+}
+```
+
+```{r}
+plot_radar_team_og(dt, "Yale Bulldogs", "Princeton Tigers")
+```
+
+```{r}
+plot_radar_team_og(dt, "Harvard Crimson", "Cornell Big Red")
+```
+
+
+```{r}
+plot_radar_team_og(dt, "Harvard Crimson", "Yale Bulldogs")
+```

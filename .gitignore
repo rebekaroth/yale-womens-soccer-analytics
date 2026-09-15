@@ -1,0 +1,8 @@
+.Rhistory
+.RData
+.Ruserdata
+.DS_Store
+
+data/*.csv
+data/*.xlsx
+data/*.xls
